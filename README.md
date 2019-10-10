@@ -12,8 +12,8 @@ A pronounceable password generator in Guile Scheme.
 
 ```
 usage: mantra [options]
-    -e, --entropy      Set minimum entropy to X bits (default 40)
-    -n, --count        Generate N passwords (default 1)
+    -e, --entropy X    Set minimum entropy to X bits (default 40)
+    -n, --count N      Generate N passwords (default 1)
     -b, --blocking     Use /dev/random instead of /dev/urandom
     -q, --no-nl        Suppress the final terminating newline
 
