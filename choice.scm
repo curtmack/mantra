@@ -25,9 +25,10 @@
              (srfi srfi-11)
              (srfi srfi-43))
 
+;; The current emit target.
 (define emit-target (make-parameter #f))
 
-;; Emit a value to the current emit target.
+;; Emit `val' to the current emit target.
 (define (emit val)
   (if (emit-target)
       (emit-target (cons val (emit-target)))
@@ -49,7 +50,7 @@
        exp exp* ...
        (reverse-list->vector (emit-target))))))
 
-;; A generic for-each that works on lists, strings, and vectors.
+;; A generic `for-each' that works on lists, strings, and vectors.
 (define (for-each-seq thunk seq)
   (cond
    ((pair? seq)
@@ -59,22 +60,22 @@
    ((vector? seq)
     (vector-for-each thunk seq))))
 
-;; For each clause provided, for each value in the from term of that clause,
-;; bind var to that value, then choose from each subsequent clause. Once all
-;; clauses have a choice bound to their variable, invoke the body in a context
+;; For each clause provided, for each value in the `from' term of that clause,
+;; bind `var' to that value, then choose from each subsequent clause. Once all
+;; clauses have a choice bound to their variable, invoke `body' in a context
 ;; which contains those bindings. The body will ultimately be invoked once for
-;; each member of the Cartesian product of all the from sequences.
+;; each member of the Cartesian product of all the `from' sequences.
 (define-syntax choose
   (syntax-rules ()
-    ((choose ((val from) more ...) body ...)
+    ((choose ((var from) more ...) body ...)
      (for-each-seq
-      (lambda (val)
+      (lambda (var)
         (choose (more ...) body ...))
       from))
     ((choose () body ...)
      (begin body ...))))
 
-;; Convenient syntax for calling choice with a list of thunks.
+;; Convenient syntax for invoking `choose' with a list of thunks.
 (define-syntax choose-from
   (syntax-rules ()
     ((choose-from thunk thunk* ...)

@@ -90,7 +90,8 @@
 
 (define (ccv)
   ;; This table consists of:
-  ;;  - A possible combination of two consonants that can start a phrase, followed by
+  ;;  - A possible combination of two consonants that can start a phrase,
+  ;;    followed by
   ;;  - A list of each vowel that is allowed to appear after that combination.
   ;; This gives us a little more control to help eliminate phrases that aren't
   ;; obviously pronounceable.

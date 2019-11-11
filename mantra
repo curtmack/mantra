@@ -73,7 +73,7 @@ usage: ~a [options]
           default-entropy
           default-count))
 
-;; Print (count) passwords of minimum entropy (entropy) bits.
+;; Print `(count)' passwords of minimum entropy `(entropy)' bits.
 (define (print-passwords)
   (do ((i 1 (1+ i)))
       ((> i (count)))
