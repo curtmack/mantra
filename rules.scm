@@ -17,7 +17,77 @@
 (define-module (rules)
   #:export (phrases))
 
-(use-modules (choice))
+(use-modules (srfi srfi-43)
+             (ice-9 control))
+
+;; Generic for-each that works on lists, vectors, and strings
+(define (for-each-seq f seq)
+  (cond
+   ((list? seq) (for-each f seq))
+   ;; vector-for-each can't be rewound in a continuation
+   ((vector? seq)
+    (do ((i 0 (1+ i)))
+        ((>= i (vector-length seq)))
+      (f (vector-ref seq i))))
+   ;; ditto string-for-each
+   ((string? seq)
+    (do ((i 0 (1+ i)))
+        ((>= i (string-length seq)))
+      (f (string-ref seq i))))))
+
+;; For each clause provided, for each value in the `from' term of that clause,
+;; bind `var' to that value, then choose from each subsequent clause. Once all
+;; clauses have a choice bound to their variable, invoke `body' in a context
+;; which contains those bindings. The body will ultimately be invoked once for
+;; each member of the Cartesian product of all the `from' sequences.
+(define-syntax choose
+  (syntax-rules ()
+    ((choose ((var from) more ...) body ...)
+     (for-each-seq
+      (lambda (var)
+        (choose (more ...) body ...))
+      from))
+    ((choose () body ...)
+     (begin body ...))))
+
+;; Convenient syntax for invoking `choose' with a list of thunks.
+(define-syntax choose-from
+  (syntax-rules ()
+    ((choose-from thunk thunk* ...)
+     (choose ((th (list thunk thunk* ...))) (th)))))
+
+(define emit-tag (make-prompt-tag "emit"))
+
+;; Emit a value to an enclosing prompt.
+(define (emit x)
+  (abort-to-prompt emit-tag x))
+
+;; Create a prompt in which emitted values are collected into a list, which is
+;; returned once the entire collection process is complete.  The list contains
+;; the values in the reverse of the order they were emitted.
+(define (with-reverse-list-emitter thunk)
+  (let* ((accum '()))
+    (letrec ((handler
+              (lambda (k x)
+                (set! accum (cons x accum))
+                (call-with-prompt
+                    emit-tag
+                  (lambda () (k x))
+                  handler))))
+      (call-with-prompt emit-tag thunk handler))
+    accum))
+
+;; Create a prompt in which emitted values are collected into a list, which is
+;; returned once the entire collection process is complete.  The list contains
+;; the values in the order they were emitted.
+(define (with-list-emitter thunk)
+  (reverse (with-reverse-list-emitter thunk)))
+
+;; Create a prompt in which emitted values are collected into a vector, which is
+;; returned once the entire collection process is complete.  The vector contains
+;; the values in the order they were emitted.
+(define (with-vector-emitter thunk)
+  (reverse-list->vector (with-reverse-list-emitter thunk)))
 
 ;; These rules are based on very rough, non-scientific experiments I did while
 ;; writing the original Haskell version of mantra back in 2015. To my ear as an
@@ -199,4 +269,5 @@
 
 (define phrases
   (with-vector-emitter
-   (choose-from hvs svh hvh vhv vvh hvv ccv vcc digsym)))
+   (lambda ()
+     (choose-from hvs svh hvh vhv vvh hvv ccv vcc digsym))))

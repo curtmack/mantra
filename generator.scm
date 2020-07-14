@@ -21,7 +21,8 @@
             entropy-per-phrase))
 
 (use-modules (rules))
-(use-modules (rnrs base)
+(use-modules ((rnrs base)
+              #:select (mod))
              (rnrs bytevectors)
              (ice-9 binary-ports)
              (srfi srfi-1))
@@ -49,7 +50,9 @@
   (expt 256 count))
 
 ;; Compute the size of the bias region when a random number between 0 and
-;; `possibilities' minus 1 is used to select from a vector of size `count'.
+;; `possibilities' minus 1 is used to select from a vector of size `count'.  In
+;; a realistic scenario, `possibilities' will be a power of 2, and `count' will
+;; be the size of the choice we actually want to make.
 (define (bias-region possibilities count)
   (mod possibilities count))
 
@@ -66,45 +69,70 @@
         (/ (bias-region possibilities count)
            possibilities))))
 
+;; At worst, we want to resample this proportion of the time.  Used to select an
+;; optimal number of random bytes to use.
+(define desired-worst-case-resample-rate 1/10)
+
 ;; Compute the optimal number of bytes for a random integer for selecting from
 ;; a vector of size count.
 (define (optimal-random-bytes count)
   ;; The minimum number of bytes such that the probability of a resample is less
-  ;; than 1/10.
-  (let ((desired-resample-rate 1/10))
-    (do ((bytes 1 (1+ bytes)))
-        ((< (resample-probability bytes count) desired-resample-rate)
-         bytes))))
+  ;; than our desired resample rate.  As this is a discrete logarithm, there's
+  ;; no closed-form computation we can use to replace this loop.  Luckily, it's
+  ;; not anticipated this loop will ever get past 3 or 4 bytes.
+  (do ((bytes 1 (1+ bytes)))
+      ((< (resample-probability bytes count)
+          desired-worst-case-resample-rate)
+       bytes)))
 
-;; Generate a random number in the range from 0 to num.
-(define* (uniform-random num #:optional (bytes (optimal-random-bytes num)))
-  (cond
-   ;; This is a shortcut. If num is a power of two, we can just use a mask.
-   ((= (logand num (1+ (lognot num))) num)
-    (logand (1- num) (random-uint bytes)))
-   (#t
-    (let ((rand (random-uint bytes)))
-      ;; bias-start will be the first value that is biased.
-      (let ((bias-start (- (max-uint bytes)
-                           (bias-region (max-uint bytes) num))))
-        ;; If this roll is in the bias range, then we need to resample to clear
-        ;; that bias. Otherwise, we can mod the number and return it.
-        (if (>= rand bias-start)
-            (uniform-random num)
-            (mod rand num)))))))
+;; Is the random number `roll' biased when randomly selecting a number from 0 to
+;; `count' minus 1 using `bytes' bytes of randomness?
+;;
+;; At this point, it's worth clarifying what we mean by "biased."  Suppose we
+;; wanted to choose a fair value from 1 to 5, by rolling a standard six-sided
+;; die.  We can force the result of the roll into that range by taking the
+;; result mod 5 (using 5 instead of 0), but now we have a problem: the numbers 2
+;; through 5 can be rolled in only one way, but a 1 can actually be rolled two
+;; different ways, since 1 mod 5 = 6 mod 5.  This means our sampling is biased.
+;; The only fair way to deal with this problem is to resample: on a 6, we can
+;; reroll the die, and keep doing this until we roll a number 1 through 5, which
+;; we'll use as our result.
+;;
+;; It turns out this will be a problem any time we try to generate a random
+;; number between 1 and N, if N is not a power of two.  That is, there will
+;; always be some residual M such that the first M values are more probable than
+;; the rest.  Using more bytes of randomness when we "roll the die" can reduce
+;; this difference to be arbitrarily small, but it can never eliminate it
+;; entirely.  The only way to truly solve this problem is detect this condition
+;; and resample, just like we rerolled the six-sided die.
+(define (biased? roll count bytes)
+  ;; The bias-start is the start of the bias region; that is, the value which is
+  ;; 0 mod 2^bytes, and is part of the final run of values that does not map
+  ;; over the full range from 0 to count exclusive.
+  (let* ((uint-range (max-uint bytes))
+         (bias-start (- uint-range
+                        (bias-region uint-range count))))
+    ;; We're biased if the roll is in the bias range.
+    (>= roll bias-start)))
 
 ;; Generate a random phrase.
-(define* (random-phrase
-          #:optional (bytes (optimal-random-bytes (vector-length phrases))))
-  (vector-ref phrases
-              (uniform-random (vector-length phrases) bytes)))
+(define random-phrase
+  (case-lambda
+    ((phrases)
+     (random-phrase phrases
+                    (optimal-random-bytes (vector-length phrases))))
+    ((phrases bytes)
+     (let reroll ((roll (random-uint bytes)))
+       (if (biased? roll (vector-length phrases) bytes)
+           (reroll (random-uint bytes))
+           (vector-ref phrases (mod roll (vector-length phrases))))))))
 
 ;; Logarithm base 2.
 (define (log2 val)
   (/ (log val) (log 2)))
 
 ;; The number of bits of entropy per phrase.
-(define entropy-per-phrase (log2 (vector-length phrases)))
+(define (entropy phrases) (log2 (vector-length phrases)))
 
 ;; Generate a random password with the given minimum entropy (specified in
 ;; bits).
@@ -115,6 +143,6 @@
      ;; entropy, then concatenate them into a single string.
      (unfold
       (lambda (remn) (negative? remn))
-      (lambda (_) (random-phrase bytes))
-      (lambda (remn) (- remn entropy-per-phrase))
+      (lambda (_) (random-phrase phrases bytes))
+      (lambda (remn) (- remn (entropy phrases)))
       min-entropy))))
