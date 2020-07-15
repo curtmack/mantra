@@ -1,5 +1,5 @@
 ;;; mantra: Pronounceable password generator in Guile
-;;; Copyright (C) 2019  Curtis Mackie
+;;; Copyright (C) 2019-2020  Curtis Mackie
 ;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
@@ -15,10 +15,12 @@
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 (define-module (rules)
-  #:export (phrases))
+  #:use-module (srfi srfi-43)
+  #:use-module (ice-9 control)
 
-(use-modules (srfi srfi-43)
-             (ice-9 control))
+  #:export (phrases
+            letter-phrases
+            digit-symbol-phrases))
 
 ;; Generic for-each that works on lists, vectors, and strings
 (define (for-each-seq f seq)
@@ -267,7 +269,20 @@
           (choose ((vowel (cdr tab)))
                   (emit (string-append (string vowel) (car tab))))))
 
+;; All acceptable phrases
 (define phrases
   (with-vector-emitter
    (lambda ()
      (choose-from hvs svh hvh vhv vvh hvv ccv vcc digsym))))
+
+;; Only phrases that contain an upper and lowercase letter
+(define letter-phrases
+  (with-vector-emitter
+   (lambda ()
+     (choose-from hvs svh hvh vhv vvh hvv ccv vcc))))
+
+;; Only phrases that contain a digit and a symbol
+(define digit-symbol-phrases
+  (with-vector-emitter
+   (lambda ()
+     (choose-from digsym))))

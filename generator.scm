@@ -15,17 +15,18 @@
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 (define-module (generator)
-  #:export (blocking
-            random-phrase
-            random-password
-            entropy-per-phrase))
+  #:use-module (rules)
+  #:use-module ((rnrs base)
+                #:select (mod))
+  #:use-module (rnrs bytevectors)
+  #:use-module (ice-9 binary-ports)
+  #:use-module (srfi srfi-1)
 
-(use-modules (rules))
-(use-modules ((rnrs base)
-              #:select (mod))
-             (rnrs bytevectors)
-             (ice-9 binary-ports)
-             (srfi srfi-1))
+  #:export (blocking
+            log2
+            random-shuffle
+            random-phrase
+            phrase-entropy))
 
 ;; This will be set by the main entrypoint to decide whether we should use the
 ;; blocking /dev/random or the nonblocking /dev/urandom. In the future, I'd like
@@ -115,34 +116,42 @@
     ;; We're biased if the roll is in the bias range.
     (>= roll bias-start)))
 
+;; Generate a random index between 0 (inclusive) and `len' (exclusive).
+(define random-index
+  (case-lambda
+    ((len)
+     (random-index len (optimal-random-bytes len)))
+    ((len bytes)
+     (let reroll ((roll (random-uint bytes)))
+       (if (biased? roll len bytes)
+           (reroll (random-uint bytes))
+           (mod roll len))))))
+
 ;; Generate a random phrase.
 (define random-phrase
   (case-lambda
     ((phrases)
-     (random-phrase phrases
-                    (optimal-random-bytes (vector-length phrases))))
+     (vector-ref phrases (random-index (vector-length phrases))))
     ((phrases bytes)
-     (let reroll ((roll (random-uint bytes)))
-       (if (biased? roll (vector-length phrases) bytes)
-           (reroll (random-uint bytes))
-           (vector-ref phrases (mod roll (vector-length phrases))))))))
+     (vector-ref phrases (random-index (vector-length phrases) bytes)))))
+
+;; Shuffle a vector using secure randomness.
+(define (random-shuffle vec)
+  ;; Knuth TAoCP Algorithm P
+  ;; This is a destructive algorithm, so defensively copy the vector first
+  (let ((vec (vector-copy vec)))
+    (do ((i (1- (vector-length vec)) (1- i)))
+        ((< i 1) vec)                   ; return the final copy vector when done
+      (let ((j (random-index (1+ i))))
+        ;; Now j is some number 0 <= j <= i
+        ;; Swap vec[i] and vec[j], then continue to the next iteration
+        (let ((tmp (vector-ref vec i)))
+          (vector-set! vec i (vector-ref vec j))
+          (vector-set! vec j tmp))))))
 
 ;; Logarithm base 2.
 (define (log2 val)
   (/ (log val) (log 2)))
 
 ;; The number of bits of entropy per phrase.
-(define (entropy phrases) (log2 (vector-length phrases)))
-
-;; Generate a random password with the given minimum entropy (specified in
-;; bits).
-(define (random-password min-entropy)
-  (let ((bytes (optimal-random-bytes (vector-length phrases))))
-    (string-concatenate
-     ;; Unfold a list of random phrases until we have achieved our minimum
-     ;; entropy, then concatenate them into a single string.
-     (unfold
-      (lambda (remn) (negative? remn))
-      (lambda (_) (random-phrase phrases bytes))
-      (lambda (remn) (- remn (entropy phrases)))
-      min-entropy))))
+(define (phrase-entropy phrases) (log2 (vector-length phrases)))

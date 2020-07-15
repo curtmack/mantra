@@ -3,7 +3,7 @@
 !#
 
 ;;; mantra: Pronounceable password generator in Guile
-;;; Copyright (C) 2019  Curtis Mackie
+;;; Copyright (C) 2019-2020  Curtis Mackie
 ;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
@@ -22,32 +22,47 @@
 
 (add-to-load-path (dirname (current-filename)))
 
-(use-modules (generator))
-(use-modules (ice-9 getopt-long))
+(use-modules (rules)
+             (generator)
+             (plans))
+(use-modules (ice-9 format)
+             (ice-9 getopt-long))
 
 (define program "mantra")
-(define version '(1 0 1))
+(define version '(1 1 0))
 
 ;; Option specification for use with getopt-long
 (define option-spec
-  `((entropy  (single-char #\e) (value #t) (predicate ,string->number))
-    (count    (single-char #\n) (value #t) (predicate ,string->number))
-    (blocking (single-char #\b) (value #f))
-    (no-nl    (single-char #\q) (value #f))
-    (version  (single-char #\v) (value #f))
-    (help     (single-char #\h) (value #f))))
+  `((min-letter-phrases       (single-char #\l) (value #t) (predicate ,string->number))
+    (min-digit-symbol-phrases (single-char #\d) (value #t) (predicate ,string->number))
+    (entropy                  (single-char #\e) (value #t) (predicate ,string->number))
+    (print-entropy            (single-char #\p) (value #f))
+    (password-count           (single-char #\n) (value #t) (predicate ,string->number))
+    (blocking                 (single-char #\b) (value #f))
+    (no-nl                    (single-char #\q) (value #f))
+    (version                  (single-char #\v) (value #f))
+    (help                     (single-char #\h) (value #f))))
 
 ;; The blocking parameter is defined in generator.scm
-(define entropy (make-parameter #f))
-(define count   (make-parameter #f))
-(define no-nl   (make-parameter #f))
+(define entropy        (make-parameter  #f))
+(define print-entropy  (make-parameter  #f))
+(define password-count (make-parameter  #f))
+(define no-nl          (make-parameter  #f))
 
 ;; A default password entropy of 40 bits is slightly padded from zxcvbn's
 ;; requirement of 10^10 possibilities for a "very unguessable" score, which is
 ;; adequate for most uses while still generating short, easily remembered
 ;; passwords.
-(define default-entropy "40")
-(define default-count    "1")
+(define default-entropy        "40")
+(define default-password-count  "1")
+
+;; These can be tweaked to ensure a certain number of letter phrases
+;; (respectively digit-symbol phrases) are added to the password.  This is
+;; useful when trying to respect password complexity rules.
+(define min-letter-phrases               (make-parameter #f))
+(define min-digit-symbol-phrases         (make-parameter #f))
+(define default-min-letter-phrases       "0")
+(define default-min-digit-symbol-phrases "0")
 
 ;; Print the version string
 (define (print-version)
@@ -62,26 +77,52 @@
   (format #t "\
 Generate random pronounceable passwords.
 usage: ~a [options]
-    -e, --entropy X    Set minimum entropy to X bits (default ~a)
-    -n, --count N      Generate N passwords (default ~a)
-    -b, --blocking     Use /dev/random instead of /dev/urandom
-    -q, --no-nl        Suppress the final terminating newline
+    -l, --min-letter-phrases X          Generate at least X letter phrases
+                                        (default ~a)
+    -d, --min-digit-symbol-phrases X    Generate at least X letter phrases
+                                        (default ~a)
+    -e, --entropy X                     Set minimum entropy to X bits
+                                        (default ~a)
 
-    -v, --version      Display program version
-    -h, --help         Display this help~%"
+    -p, --print-entropy                 Print the actual entropy of each
+                                        generated password
+    -n, --password-count N              Generate N passwords (default ~a)
+    -b, --blocking                      Use /dev/random instead of /dev/urandom
+    -q, --no-nl                         Suppress the final terminating newline
+
+    -v, --version                       Display program version
+    -h, --help                          Display this help~%"
           (basename progname)
+          default-min-letter-phrases
+          default-min-digit-symbol-phrases
           default-entropy
-          default-count))
+          default-password-count))
 
-;; Print `(count)' passwords of minimum entropy `(entropy)' bits.
+;; Print `(password-count)' passwords of minimum entropy `(entropy)' bits.
 (define (print-passwords)
-  (do ((i 1 (1+ i)))
-      ((> i (count)))
-    (display (random-password (entropy)))
-    ;; Don't print newline after final password when no-nl is set
-    (unless (and (= i (count))
-                 (no-nl))
-      (newline))))
+  (let ((raw-plan (make-plan
+                   phrases (entropy)
+                   letter-phrases (min-letter-phrases)
+                   digit-symbol-phrases (min-digit-symbol-phrases))))
+    (when (print-entropy)
+      (let* ((header (format #f "Entropy/password: ~,2f"
+                             (apply plan-entropy raw-plan)))
+             (header-underline (make-string (string-length header) #\-)))
+        (display header)
+        (newline)
+        (display header-underline)
+        (when (> (password-count) 0)
+          (newline))))
+    (do ((i 1 (1+ i)))
+        ((> i (password-count)))
+      ;; Compile the plan here so that each password re-shuffles the phrase
+      ;; layout
+      (let ((compiled-plan (apply compile-plan raw-plan)))
+        (display (random-password compiled-plan)))
+      ;; Don't print newline after final password when no-nl is set
+      (unless (and (= i (password-count))
+                   (no-nl))
+        (newline)))))
 
 ;; Script entrypoint
 (define (main args)
@@ -96,12 +137,21 @@ usage: ~a [options]
             (when version-wanted (print-version))
             (when help-wanted (print-usage progname)))
           ;; Otherwise, set up to print passwords normally.
-          (parameterize ((entropy  (string->number
-                                    (option-ref options 'entropy
-                                                default-entropy)))
-                         (count    (string->number
-                                    (option-ref options 'count
-                                                default-count)))
-                         (blocking (option-ref options 'blocking #f))
-                         (no-nl    (option-ref options 'no-nl    #f)))
+          (parameterize ((min-letter-phrases
+                          (string->number
+                           (option-ref options 'min-letter-phrases
+                                       default-min-letter-phrases)))
+                         (min-digit-symbol-phrases
+                          (string->number
+                           (option-ref options 'min-digit-symbol-phrases
+                                       default-min-digit-symbol-phrases)))
+                         (entropy        (string->number
+                                          (option-ref options 'entropy
+                                                      default-entropy)))
+                         (password-count (string->number
+                                          (option-ref options 'password-count
+                                                      default-password-count)))
+                         (print-entropy  (option-ref options 'print-entropy #f))
+                         (blocking       (option-ref options 'blocking #f))
+                         (no-nl          (option-ref options 'no-nl    #f)))
             (print-passwords))))))
