@@ -29,7 +29,7 @@
              (ice-9 getopt-long))
 
 (define program "mantra")
-(define version '(1 1 0))
+(define version '(1 1 1))
 
 ;; Option specification for use with getopt-long
 (define option-spec
