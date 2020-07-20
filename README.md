@@ -14,7 +14,7 @@ A pronounceable password generator in Guile Scheme.
 usage: mantra [options]
     -l, --min-letter-phrases X          Generate at least X letter phrases
                                         (default 0)
-    -d, --min-digit-symbol-phrases X    Generate at least X letter phrases
+    -d, --min-digit-symbol-phrases X    Generate at least X digit/symbol phrases
                                         (default 0)
     -e, --entropy X                     Set minimum entropy to X bits
                                         (default 40)
