@@ -79,7 +79,7 @@ Generate random pronounceable passwords.
 usage: ~a [options]
     -l, --min-letter-phrases X          Generate at least X letter phrases
                                         (default ~a)
-    -d, --min-digit-symbol-phrases X    Generate at least X letter phrases
+    -d, --min-digit-symbol-phrases X    Generate at least X digit/symbol phrases
                                         (default ~a)
     -e, --entropy X                     Set minimum entropy to X bits
                                         (default ~a)
