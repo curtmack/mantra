@@ -154,4 +154,5 @@
   (/ (log val) (log 2)))
 
 ;; The number of bits of entropy per phrase.
-(define (phrase-entropy phrases) (log2 (vector-length phrases)))
+(define (phrase-entropy phrases)
+  (log2 (vector-length phrases)))

@@ -12,21 +12,24 @@ A pronounceable password generator in Guile Scheme.
 
 ```
 usage: mantra [options]
-    -l, --min-letter-phrases X          Generate at least X letter phrases
-                                        (default 0)
-    -d, --min-digit-symbol-phrases X    Generate at least X digit/symbol phrases
-                                        (default 0)
-    -e, --entropy X                     Set minimum entropy to X bits
-                                        (default 40)
+    -s, --allowed-symbols X           Digit/symbol phrases will only use the
+                                      symbols in X
+                                      (default !@#$%^&*()[]{}`~-+=_'";:,.<>/?)
+    -l, --min-letter-phrases X        Generate at least X letter phrases
+                                      (default 0)
+    -d, --min-digit-symbol-phrases X  Generate at least X digit/symbol phrases
+                                      (default 0)
+    -e, --entropy X                   Set minimum entropy to X bits
+                                      (default 40)
 
-    -p, --print-entropy                 Print the actual entropy of each
-                                        generated password
-    -n, --password-count N              Generate N passwords (default 1)
-    -b, --blocking                      Use /dev/random instead of /dev/urandom
-    -q, --no-nl                         Suppress the final terminating newline
+    -p, --print-entropy               Print the actual entropy of each
+                                      generated password
+    -n, --password-count N            Generate N passwords (default 1)
+    -b, --blocking                    Use /dev/random instead of /dev/urandom
+    -q, --no-nl                       Suppress the final terminating newline
 
-    -v, --version                       Display program version
-    -h, --help                          Display this help
+    -v, --version                     Display program version
+    -h, --help                        Display this help
 ```
 
 Currently there is no real build or install process, and the main script must be

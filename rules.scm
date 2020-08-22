@@ -18,14 +18,13 @@
   #:use-module (srfi srfi-43)
   #:use-module (ice-9 control)
 
-  #:export (phrases
-            letter-phrases
-            digit-symbol-phrases))
+  #:export (initialize-phrase-vectors))
 
-;; Generic for-each that works on lists, vectors, and strings
+;; Generic for-each that works on lists, vectors, strings, and char-sets
 (define (for-each-seq f seq)
   (cond
-   ((list? seq) (for-each f seq))
+   ((list? seq)
+    (for-each f seq))
    ;; vector-for-each can't be rewound in a continuation
    ((vector? seq)
     (do ((i 0 (1+ i)))
@@ -35,7 +34,11 @@
    ((string? seq)
     (do ((i 0 (1+ i)))
         ((>= i (string-length seq)))
-      (f (string-ref seq i))))))
+      (f (string-ref seq i))))
+   ;; ditto char-set-for-each... the easiest solution here is to convert it to a
+   ;; list
+   ((char-set? seq)
+    (for-each f (char-set->list seq)))))
 
 ;; For each clause provided, for each value in the `from' term of that clause,
 ;; bind `var' to that value, then choose from each subsequent clause. Once all
@@ -65,31 +68,27 @@
   (abort-to-prompt emit-tag x))
 
 ;; Create a prompt in which emitted values are collected into a list, which is
-;; returned once the entire collection process is complete.  The list contains
-;; the values in the reverse of the order they were emitted.
-(define (with-reverse-list-emitter thunk)
-  (let* ((accum '()))
-    (letrec ((handler
-              (lambda (k x)
-                (set! accum (cons x accum))
-                (call-with-prompt
-                    emit-tag
-                  (lambda () (k x))
-                  handler))))
-      (call-with-prompt emit-tag thunk handler))
-    accum))
-
-;; Create a prompt in which emitted values are collected into a list, which is
-;; returned once the entire collection process is complete.  The list contains
-;; the values in the order they were emitted.
-(define (with-list-emitter thunk)
-  (reverse (with-reverse-list-emitter thunk)))
-
-;; Create a prompt in which emitted values are collected into a vector, which is
-;; returned once the entire collection process is complete.  The vector contains
-;; the values in the order they were emitted.
-(define (with-vector-emitter thunk)
-  (reverse-list->vector (with-reverse-list-emitter thunk)))
+;; returned once the entire collection process is complete.  The optional second
+;; argument sets the starting accumulator, which defaults to the empty list.
+;; The list contains the values in the reverse of the order they were emitted,
+;; followed by the entire original accumulator (unchanged).  Two values are
+;; returned: the list thus produced, and the number of values emitted (i.e. the
+;; length of the list, minus the length of the initial accumulator).
+(define with-emit
+  (case-lambda
+    ((thunk) (with-emit thunk '()))
+    ((thunk accum)
+     (let ((num 0))
+       (letrec ((handler
+                 (lambda (k x)
+                   (set! accum (cons x accum))
+                   (set! num (1+ num))
+                   (call-with-prompt
+                       emit-tag
+                     (lambda () (k x))
+                     handler))))
+         (call-with-prompt emit-tag thunk handler))
+       (values accum num)))))
 
 ;; These rules are based on very rough, non-scientific experiments I did while
 ;; writing the original Haskell version of mantra back in 2015. To my ear as an
@@ -134,9 +133,11 @@
            (v2 lower-vowels))
           (emit (string v1 h v2))))
 
-(define (digsym)
+;; This will produce every phrase of the form (digit symbol) /or/ (symbol
+;; digit), given a sequence of allowed symbols as input.
+(define (digsym allowed-symbols)
   (choose ((dig digits)
-           (sym symbols))
+           (sym allowed-symbols))
           (emit (string dig sym))
           (emit (string sym dig))))
 
@@ -269,20 +270,34 @@
           (choose ((vowel (cdr tab)))
                   (emit (string-append (string vowel) (car tab))))))
 
-;; All acceptable phrases
-(define phrases
-  (with-vector-emitter
-   (lambda ()
-     (choose-from hvs svh hvh vhv vvh hvv ccv vcc digsym))))
-
-;; Only phrases that contain an upper and lowercase letter
-(define letter-phrases
-  (with-vector-emitter
-   (lambda ()
-     (choose-from hvs svh hvh vhv vvh hvv ccv vcc))))
-
-;; Only phrases that contain a digit and a symbol
-(define digit-symbol-phrases
-  (with-vector-emitter
-   (lambda ()
-     (choose-from digsym))))
+;; Given the rules for combining letter phrases (above) and a list of allowed
+;; symbols, produce three values: the vector of all letter phrases, the vector
+;; of all digit-symbol phrases, and the vector of all phrases (i.e. the
+;; concatenation of the other two).
+(define (initialize-phrase-vectors allowed-symbols)
+  ;; Start by getting letter phrases and taking in the count
+  (call-with-values
+      (lambda ()
+        (with-emit
+         (lambda ()
+           (choose-from hvs svh hvh vhv vvh hvv ccv vcc))))
+    (lambda (letter-phrases num-letter-phrases)
+      ;; Do the same with digit-symbol phrases, appending the two lists
+      (call-with-values
+          (lambda ()
+            (with-emit
+             (lambda ()
+               (digsym allowed-symbols))))
+        (lambda (digit-symbol-phrases num-digit-symbol-phrases)
+          ;; Put the phrases into a vector
+          (let ((letter-phrase-vector (list->vector letter-phrases))
+                (digit-symbol-phrase-vector (list->vector
+                                             digit-symbol-phrases)))
+            (values
+             letter-phrase-vector
+             digit-symbol-phrase-vector
+             ;; TODO: Rewrite this to use shared memory?  There's
+             ;; substring/shared for strings, but I don't know of a way to do
+             ;; this with vectors in Guile's standard library...
+             (vector-append letter-phrase-vector
+                            digit-symbol-phrase-vector))))))))

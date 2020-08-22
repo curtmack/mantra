@@ -29,11 +29,12 @@
              (ice-9 getopt-long))
 
 (define program "mantra")
-(define version '(1 1 1))
+(define version '(1 2 0))
 
 ;; Option specification for use with getopt-long
 (define option-spec
-  `((min-letter-phrases       (single-char #\l) (value #t) (predicate ,string->number))
+  `((allowed-symbols          (single-char #\s) (value #t))
+    (min-letter-phrases       (single-char #\l) (value #t) (predicate ,string->number))
     (min-digit-symbol-phrases (single-char #\d) (value #t) (predicate ,string->number))
     (entropy                  (single-char #\e) (value #t) (predicate ,string->number))
     (print-entropy            (single-char #\p) (value #f))
@@ -64,6 +65,10 @@
 (define default-min-letter-phrases       "0")
 (define default-min-digit-symbol-phrases "0")
 
+;; Allowed char-set of symbols
+(define allowed-symbols         (make-parameter #f))
+(define default-allowed-symbols "!@#$%^&*()[]{}`~-+=_'\";:,.<>/?")
+
 ;; Print the version string
 (define (print-version)
   (format #t "~a v~a.~a.~a~%"
@@ -77,22 +82,26 @@
   (format #t "\
 Generate random pronounceable passwords.
 usage: ~a [options]
-    -l, --min-letter-phrases X          Generate at least X letter phrases
-                                        (default ~a)
-    -d, --min-digit-symbol-phrases X    Generate at least X digit/symbol phrases
-                                        (default ~a)
-    -e, --entropy X                     Set minimum entropy to X bits
-                                        (default ~a)
+    -s, --allowed-symbols X           Digit/symbol phrases will only use the
+                                      symbols in X
+                                      (default ~a)
+    -l, --min-letter-phrases X        Generate at least X letter phrases
+                                      (default ~a)
+    -d, --min-digit-symbol-phrases X  Generate at least X digit/symbol phrases
+                                      (default ~a)
+    -e, --entropy X                   Set minimum entropy to X bits
+                                      (default ~a)
 
-    -p, --print-entropy                 Print the actual entropy of each
-                                        generated password
-    -n, --password-count N              Generate N passwords (default ~a)
-    -b, --blocking                      Use /dev/random instead of /dev/urandom
-    -q, --no-nl                         Suppress the final terminating newline
+    -p, --print-entropy               Print the actual entropy of each
+                                      generated password
+    -n, --password-count N            Generate N passwords (default ~a)
+    -b, --blocking                    Use /dev/random instead of /dev/urandom
+    -q, --no-nl                       Suppress the final terminating newline
 
-    -v, --version                       Display program version
-    -h, --help                          Display this help~%"
+    -v, --version                     Display program version
+    -h, --help                        Display this help~%"
           (basename progname)
+          default-allowed-symbols
           default-min-letter-phrases
           default-min-digit-symbol-phrases
           default-entropy
@@ -100,29 +109,40 @@ usage: ~a [options]
 
 ;; Print `(password-count)' passwords of minimum entropy `(entropy)' bits.
 (define (print-passwords)
-  (let ((raw-plan (make-plan
-                   phrases (entropy)
-                   letter-phrases (min-letter-phrases)
-                   digit-symbol-phrases (min-digit-symbol-phrases))))
-    (when (print-entropy)
-      (let* ((header (format #f "Entropy/password: ~,2f"
-                             (apply plan-entropy raw-plan)))
-             (header-underline (make-string (string-length header) #\-)))
-        (display header)
-        (newline)
-        (display header-underline)
-        (when (> (password-count) 0)
-          (newline))))
-    (do ((i 1 (1+ i)))
-        ((> i (password-count)))
-      ;; Compile the plan here so that each password re-shuffles the phrase
-      ;; layout
-      (let ((compiled-plan (apply compile-plan raw-plan)))
-        (display (random-password compiled-plan)))
-      ;; Don't print newline after final password when no-nl is set
-      (unless (and (= i (password-count))
-                   (no-nl))
-        (newline)))))
+  (call-with-values
+      (lambda ()
+        (initialize-phrase-vectors (allowed-symbols)))
+    (lambda (letter-phrases digit-symbol-phrases phrases)
+      (catch 'impossible-plan
+        (lambda ()
+          (let ((raw-plan (make-plan
+                           phrases (entropy)
+                           letter-phrases (min-letter-phrases)
+                           digit-symbol-phrases (min-digit-symbol-phrases))))
+            (when (print-entropy)
+              (let* ((header (format #f "Entropy/password: ~,2f"
+                                     (apply plan-entropy raw-plan)))
+                     (header-underline (make-string (string-length header) #\-)))
+                (display header)
+                (newline)
+                (display header-underline)
+                (when (> (password-count) 0)
+                  (newline))))
+            (do ((i 1 (1+ i)))
+                ((> i (password-count)))
+              ;; Compile the plan here so that each password re-shuffles the phrase
+              ;; layout
+              (let ((compiled-plan (apply compile-plan raw-plan)))
+                (display (random-password compiled-plan)))
+              ;; Don't print newline after final password when no-nl is set
+              (unless (and (= i (password-count))
+                           (no-nl))
+                (newline)))))
+        (lambda (key . num)
+          (format #t
+                  "~a ~a~%"
+                  "Arguments are unsatisfiable"
+                  "(allowed-symbols is empty and min-digit-symbol-phrases > 0)"))))))
 
 ;; Script entrypoint
 (define (main args)
@@ -137,7 +157,11 @@ usage: ~a [options]
             (when version-wanted (print-version))
             (when help-wanted (print-usage progname)))
           ;; Otherwise, set up to print passwords normally.
-          (parameterize ((min-letter-phrases
+          (parameterize ((allowed-symbols
+                          (string->char-set
+                           (option-ref options 'allowed-symbols
+                                       default-allowed-symbols)))
+                         (min-letter-phrases
                           (string->number
                            (option-ref options 'min-letter-phrases
                                        default-min-letter-phrases)))

@@ -104,13 +104,23 @@
         ;; entropy.
         (+ accum #;(apply perm-entropy args))
         (let ((next-phrases (first remaining))
-              (next-number (second remaining)))
-          ;; The entropy per phrase is given by (phrase-entropy next-phrases).
-          ;; Because it's a logarithmic measure, the total entropy is that times
-          ;; the number to add.
-          (recur
-           (+ accum (* next-number (phrase-entropy next-phrases)))
-           (drop remaining 2))))))
+              (next-number (second remaining))
+              (next-remaining (drop remaining 2)))
+          (cond
+           ;; If next-number is 0, then no entropy is added.
+           ((zero? next-number)
+            (recur accum next-remaining))
+           ;; If next-phrases is empty and next-number is nonzero,
+           ;; then the plan is impossible.
+           ((zero? (vector-length next-phrases))
+            (throw 'impossible-plan))
+           ;; Otherwise, the entropy per phrase is given by (phrase-entropy
+           ;; next-phrases).  Because it's a logarithmic measure, the total
+           ;; entropy added is obtained by multiplying.
+           (#t
+            (recur
+             (+ accum (* next-number (phrase-entropy next-phrases)))
+             (drop remaining 2))))))))
 
 ;; Given the generation plan `starting-args', of the form (a 2 b 3 ... c N ...),
 ;; produce a final generation plan with additional phrases from the phrase
