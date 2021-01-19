@@ -14,8 +14,8 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-(define-module (plans)
-  #:use-module (generator)
+(define-module (mantra-libs plans)
+  #:use-module (mantra-libs generator)
   #:use-module (srfi srfi-1)
 
   #:export (compile-plan

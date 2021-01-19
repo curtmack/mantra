@@ -6,7 +6,13 @@ A pronounceable password generator in Guile Scheme.
 
 * A system with /dev/random and /dev/urandom (i.e. all modern POSIX systems,
   including Cygwin)
-* GNU Guile 2.0 or later (tested in 2.0.13 and 2.2.4)
+* GNU Guile 2.0 or later (tested in 2.0.13, 2.2.4, and 3.0.1)
+
+## Installation
+
+* `./configure`
+* `make`
+* `make install` (as `sudo` if needed)
 
 ## Usage
 
@@ -31,10 +37,6 @@ usage: mantra [options]
     -v, --version                     Display program version
     -h, --help                        Display this help
 ```
-
-Currently there is no real build or install process, and the main script must be
-in the same directory as its dependencies. You may symlink the script to a more
-convenient directory if you wish.
 
 ## Disclaimers
 

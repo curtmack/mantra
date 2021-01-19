@@ -1,0 +1,13 @@
+# Autotools ephemera
+*.log
+aclocal.m4
+autom4te.cache
+build-aux/*
+config.status
+configure
+Makefile
+Makefile.in
+pre-inst-env
+
+# Object files
+*.go

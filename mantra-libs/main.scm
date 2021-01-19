@@ -1,7 +1,3 @@
-#!/usr/bin/guile \
--e main -s
-!#
-
 ;;; mantra: Pronounceable password generator in Guile
 ;;; Copyright (C) 2019-2020  Curtis Mackie
 ;;;
@@ -18,15 +14,14 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;; -*- mode: scheme -*-
+(define-module (mantra-libs main)
+  #:use-module (mantra-libs rules)
+  #:use-module (mantra-libs generator)
+  #:use-module (mantra-libs plans)
+  #:use-module (ice-9 format)
+  #:use-module (ice-9 getopt-long)
 
-(add-to-load-path (dirname (current-filename)))
-
-(use-modules (rules)
-             (generator)
-             (plans))
-(use-modules (ice-9 format)
-             (ice-9 getopt-long))
+  #:export (main))
 
 (define program "mantra")
 (define version '(1 2 0))

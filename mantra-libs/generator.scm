@@ -14,8 +14,8 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-(define-module (generator)
-  #:use-module (rules)
+(define-module (mantra-libs generator)
+  #:use-module (mantra-libs rules)
   #:use-module ((rnrs base)
                 #:select (mod))
   #:use-module (rnrs bytevectors)
