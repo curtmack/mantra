@@ -1,4 +1,4 @@
-AC_INIT([mantra], [1.2.0], [curtis@mackie.ninja])
+AC_INIT([mantra], [2.0.0], [curtis@mackie.ninja])
 AC_CONFIG_SRCDIR([mantra.sh])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])

@@ -24,7 +24,7 @@
   #:export (main))
 
 (define program "mantra")
-(define version '(1 2 0))
+(define version '(2 0 0))
 
 ;; Option specification for use with getopt-long
 (define option-spec
